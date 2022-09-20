@@ -1,0 +1,221 @@
+--odps sql
+--********************************************************************--
+--author:远光软件康永刚
+--create time:2022-09-20 16:09:19
+--********************************************************************--
+-- 新增的指标的计算逻辑
+-- ywfl1048dl='营销' ywfl1048dxid ='营销综合管理' and cbys not in ('233005719','233005720')
+-- 需要用到分摊后的表
+
+create
+
+-- 问题
+-- 1.怎么区分5大类15小类
+
+-- --分母
+select /* + MAPJOIN(c) */
+compid,
+compcode as orgobjcode,
+'' as  compname_abbr,
+compname as orgobjnamegl,
+mdm_pcode,--
+compname_abbr as mdm_pname,
+c.ywly,
+c.zbxh,
+c.zbmc,
+'' xmbm,
+'' xmmc,
+'' zyxf,
+'' qyxz,
+'' pjcode,
+'' hyxz,
+'' dw_name,
+'' ddbm,
+(case when kmid in ('13702452','13703179') THEN '办公用品'
+      WHEN  kmid in ('13702454','13703200') THEN '劳动保护用品'
+      WHEN  kmid in ('13702462','13703190') THEN '低值易耗品等消耗类物资'
+ END) kmdl,--'科目大类',----
+kmname as kmmc,
+kmid as kmbm,
+'' as pzbm,ttime,--制证日期
+'业务活动' as glwd_lx,	-- '管理维度类型',--
+zbdlname  as glwd_dl,	-- '管理维度大类',--
+ywfl1048dxmc as glwd,
+'总计' as tjlx,
+c.ywfl as fylx,
+tmoneyf  as pzje,
+0.00 pzsl,
+0.00 jezb,
+0.00 slzb,
+0.00 bl,
+provincial_id,
+-- ''  as data_source,
+''  as extend_field_1,
+''  as extend_field_2,
+''  as extend_field_3,
+''  as extend_field_4,
+''  as extend_field_5,
+0.00 as extend_field_6,
+0.00 as extend_field_7,
+0.00 as extend_field_8,
+0.00 as extend_field_9,
+getdate() as etl_time,
+c.zbbm
+from
+(
+select  d.compid,d.compcode,d.compname,z.compname_abbr,z.mdm_pcode,
+sum(d.tmoneyf) tmoneyf,--凭证金额
+d.provincial_id,
+d.kmid,d.kmname,d.ttime  as ttime ,d.ywfl1048dxmc,d.zbdlname,d.billid,d.tyear
+from
+--  生产成本 的 3个 13702452	生产成本\办公费 ， 13702454	生产成本\劳动保护费，13702462	生产成本\低值易耗品摊销
+-- 科目id  全部在 企业管理中的 认为是问题数据
+    (
+
+    select provincial_id,compid,compcode,compname,kmid,billid,kmname,to_char(ttime,'yyyymm') AS  ttime,'' as zbdlname ,tmoneyf,ywfl1048dxmc,'' as wtlx,tyear from FCT_FIN_GW_010101_KBMX_DF  a
+    where to_char(ttime,'yyyy') = SUBSTR( ${ds},1,4)
+    and kmid IN (
+     --生产成本
+    '13702452','13702454','13702462',
+    --企业管理
+    '13703179','13703200','13703190'
+    )
+    and wd15 in ( SELECT  iid  FROM    pro_ads_fin_prd.dim_fin_gw_010100_t_xtitemsyw_ext_mf WHERE  itemcode  like '10500002%' GROUP BY iid)
+    and tmoneyf<>0 and moneytype='借'
+    and not exists (select 1 from dim_fin_gw_010100_companyinfo_hbwdw_mf b
+    WHERE   a.compid = b.compid AND     a.tyear = b.vpd_year  and     a.provincial_id=b.provincial_id)
+   )d
+    right join (select orgobjcode ,compname_abbr,orgobjnamegl,mdm_pcode,mdm_pname,provincial_id  from self_ads_fin_gw_010100_dwjc_df
+    where substr(compid,3,2) in ('99','00'))  z  on z.provincial_id=d.provincial_id
+    group by d.compid,d.compcode,d.compname,z.compname_abbr,z.mdm_pcode,d.provincial_id,d.kmid,d.billid,d.kmname,d.ttime,d.ywfl1048dxmc,d.zbdlname,d.tyear
+
+)t
+join (select ywly,jslx,ywfl,zbbm,zbxh,zbmc from self_ads_sjzljc_pzb where zbbm='WZCG-001') c on  1=1
+----剔除合并外单位
+    where  not exists (select 1 from dim_fin_gw_010100_companyinfo_hbwdw_mf b
+    WHERE   t.compid = b.compid AND     t.tyear = b.vpd_year  and     t.provincial_id=b.provincial_id)
+    and not exists (select 1  from
+    (   --剔除掉冲销和被冲销的凭证
+            select provincial_id,billid,tyear
+            from (
+                    select  provincial_id,billid,tyear
+                    from    fct_fin_gw_010101_xtcxtzdy_MF
+                    where   nvl(zt,0)<>1
+                    union all
+                    select  provincial_id,dbillid,dtyear
+                    from    fct_fin_gw_010101_xtcxtzdy_MF
+                    where   nvl(zt,0)<>1
+            ) a
+                group by    provincial_id,billid,tyear
+    ) y where t.provincial_id=y.provincial_id  and t.tyear=y.tyear  and t.billid=y.billid
+    )
+
+union all
+--分子
+
+select /* + MAPJOIN(c) */
+compid,
+compcode as orgobjcode,
+'' as  compname_abbr,
+compname as orgobjnamegl,
+mdm_pcode,--
+compname_abbr as mdm_pname,
+c.ywly,
+c.zbxh,
+c.zbmc,
+'' xmbm,
+'' xmmc,
+'' zyxf,
+'' qyxz,
+'' pjcode,
+'' hyxz,
+'' dw_name,
+'' ddbm,
+(case when kmid in ('13702452','13703179') THEN '办公用品'
+      WHEN  kmid in ('13702454','13703200') THEN '劳动保护用品'
+      WHEN  kmid in ('13702462','13703190') THEN '低值易耗品等消耗类物资'
+ END) kmdl,--'科目大类',----
+kmname as kmmc,
+kmid as kmbm,
+billid as pzbm,
+ttime,--制证日期
+'业务活动' as glwd_lx,	-- '管理维度类型',--
+zbdlname  as glwd_dl,	-- '管理维度大类',--
+ywfl1048dxmc as glwd,
+'明细' as tjlx,
+c.ywfl as fylx,
+tmoneyf  as pzje,
+0.00 pzsl,
+0.00 jezb,
+0.00 slzb,
+0.00 bl,
+provincial_id,
+-- ''  as data_source,
+wtlx  as extend_field_1,
+''  as extend_field_2,
+''  as extend_field_3,
+''  as extend_field_4,
+''  as extend_field_5,
+0.00 as extend_field_6,
+0.00 as extend_field_7,
+0.00 as extend_field_8,
+0.00 as extend_field_9,
+getdate() as etl_time,
+c.zbbm
+from
+(
+select   d.compid,d.compcode,d.compname,z.compname_abbr,z.mdm_pcode,
+sum(d.tmoneyf) tmoneyf,--凭证金额
+d.provincial_id,
+d.kmid,d.billid,d.kmname,d.ttime,d.ywfl1048dxmc,d.zbdlname,d.wtlx,d.tyear
+from
+    (
+  --  生产成本 的 3个 13702452	生产成本\办公费 ， 13702454	生产成本\劳动保护费，13702462	生产成本\低值易耗品摊销
+-- 3个生产成本科目id  只要在维度 企业管理中的 认为是问题数据
+
+    select provincial_id,COMPID,compcode,compname,KMID,'' as billid,kmname,to_char(ttime,'yyyymm') ttime,'企业管理' as zbdlname,sum(round(tmoneyf) )tmoneyf, ywfl1048dxmc,'拆分不合规' as wtlx,tyear from FCT_FIN_GW_010101_KBMX_DF a
+where
+ to_char(ttime,'yyyy') = SUBSTR( ${ds},1,4) and
+ kmid IN ('13702452','13702454','13702462')
+						  and tmoneyf <> 0 and  moneytype='借'
+                          --企业管理
+						  and wd12   in('11200276')
+                           and wd15 in ( SELECT  iid  FROM    pro_ads_fin_prd.dim_fin_gw_010100_t_xtitemsyw_ext_mf WHERE  itemcode  like '10500002%' GROUP BY iid)
+                          group by provincial_id,COMPID,compcode,compname,KMID,kmname,to_char(ttime,'yyyymm'),ywfl1048dxmc,tyear
+
+union all
+    --	生产成本 几个科目  不在 7大类17小类
+    select provincial_id,compid,compcode,compname,kmid,billid,kmname,to_char(ttime,'yyyymm') ttime,'' as zbdlname ,tmoneyf,ywfl1048dxmc,'业务活动不合规' as wtlx,tyear from FCT_FIN_GW_010101_KBMX_DF  a
+    where to_char(ttime,'yyyy') = SUBSTR( ${ds},1,4)
+    and kmid IN ('13702452','13702454','13702462')
+    and wd12 not in  ( select zbvalue from con_fin_ggzy_config_detail where pkid='57182af2-eba8-11ec-9cf9-6805ca82fc70' and zbdlname in('营销','检修','运行','运营支持','企业管理','复合业务活动','非输配电业务') and dxlx='YWFL1048' and zbyear = SUBSTR( ${ds},1,4))
+     and wd15 in ( SELECT  iid  FROM    pro_ads_fin_prd.dim_fin_gw_010100_t_xtitemsyw_ext_mf WHERE  itemcode  like '10500002%' GROUP BY iid)
+    and tmoneyf<>0 and moneytype='借'
+
+
+
+   )d
+    left join (select orgobjcode ,compname_abbr,orgobjnamegl,mdm_pcode,mdm_pname,provincial_id  from self_ads_fin_gw_010100_dwjc_df
+    where substr(compid,3,2) in ('99','00'))  z  on z.provincial_id=d.provincial_id
+    group by d.compid,d.compcode,d.compname,z.compname_abbr,z.mdm_pcode,d.provincial_id,d.kmid,d.billid,d.kmname,d.ttime,d.ywfl1048dxmc,d.zbdlname,d.wtlx,d.tyear
+
+)t
+join (select ywly,jslx,ywfl,zbbm,zbxh,zbmc from self_ads_sjzljc_pzb where zbbm='WZCG-001') c on  1=1
+----剔除合并外单位
+    where  not exists (select 1 from dim_fin_gw_010100_companyinfo_hbwdw_mf b
+    WHERE   t.compid = b.compid AND     t.tyear = b.vpd_year  and     t.provincial_id=b.provincial_id)
+    and not exists (select 1  from
+    (   --剔除掉冲销和被冲销的凭证
+            select provincial_id,billid,tyear
+            from (
+                    select  provincial_id,billid,tyear
+                    from    fct_fin_gw_010101_xtcxtzdy_MF
+                    where   nvl(zt,0)<>1
+                    union all
+                    select  provincial_id,dbillid,dtyear
+                    from    fct_fin_gw_010101_xtcxtzdy_MF
+                    where   nvl(zt,0)<>1
+            ) a
+                group by    provincial_id,billid,tyear
+    ) y where t.provincial_id=y.provincial_id  and t.tyear=y.tyear  and t.billid=y.billid
+    )
