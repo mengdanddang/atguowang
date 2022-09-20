@@ -4,6 +4,4 @@
 # @File    : Entrance.py
 # @Software: PyCharm
 
-  # ss
 
-# class 
