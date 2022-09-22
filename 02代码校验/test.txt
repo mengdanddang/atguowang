@@ -7,7 +7,9 @@
 -- ywfl1048dl='营销' ywfl1048dxid ='营销综合管理' and cbys not in ('233005719','233005720')
 -- 需要用到分摊后的表
 
-create
+-- create
+
+select *
 
 -- 问题
 -- 1.怎么区分5大类15小类
