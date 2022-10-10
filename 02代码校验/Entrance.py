@@ -11,7 +11,7 @@ class Entrance:
 
     def Entrance(self,str_world):
         pass
-
+# 迭代/
 # Deal_Words
 if __name__ == '__main__':
     print(Deal_Words().Deal_DML_Words(""))
